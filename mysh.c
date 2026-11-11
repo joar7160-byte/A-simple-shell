@@ -36,7 +36,12 @@ int main(int argc, char *argv[]){
             break;
         }
         
-        line[ind] = '\0';
+        line[ind] = '\0';    //end of string
+
+        if(strcmp(line, "exit") == 0){ //exit command so stop running shell
+            running = 0;   
+        }
+        
 
     }
     return EXIT_SUCCESS;
