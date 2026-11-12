@@ -41,8 +41,18 @@ int main(int argc, char *argv[]){
         if(strcmp(line, "exit") == 0){ //exit command so stop running shell
             running = 0;   
         }
-        
 
+        else if(strcmp(line, "pwd") == 0){ //if command is pwd
+            char cdp[4096];      //used to store curr directory path
+
+            //get curr directory and print each 
+            if(getcwd(cdp, sizeof(cdp)) != NULL){ 
+                printf("%s\n", cdp);
+            }
+            else{
+                perror("pwd");
+            }
+        }
     }
     return EXIT_SUCCESS;
 }
