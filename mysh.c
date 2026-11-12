@@ -24,9 +24,7 @@ typedef struct {
 } JobResult;
 
 static const char *home_directory;
-
-static void *checked_realloc(void *memory, size_t bytes)
-{
+static void *checked_realloc(void *memory, size_t bytes){
     void *result = realloc(memory, bytes);
     if (!result) {
         perror("realloc");
@@ -35,41 +33,33 @@ static void *checked_realloc(void *memory, size_t bytes)
     return result;
 }
 
-static char *copy_string(const char *text)
-{
+static char *copy_string(const char *text){
     char *copy = checked_realloc(NULL, strlen(text) + 1);
     strcpy(copy, text);
     return copy;
 }
 
-static char *current_directory(void)
-{
+static char *current_directory(void){
     size_t capacity = 256;
     char *path = NULL;
-
     for (;;) {
         path = checked_realloc(path, capacity);
-        if (getcwd(path, capacity))
-            return path;
-        if (errno != ERANGE) {
-            free(path);
+        if (getcwd(path, capacity)) return path;
+        if (errno != ERANGE) { free(path);
             return NULL;
         }
         capacity *= 2;
     }
 }
 
-static void print_prompt(void)
-{
+static void print_prompt(void){
     char *cwd = current_directory();
     if (!cwd) {
         perror("getcwd");
         printf("mysh$ ");
     } else {
         size_t length = home_directory ? strlen(home_directory) : 0;
-        while (length > 1 && home_directory[length - 1] == '/')
-            length--;
-
+        while (length > 1 && home_directory[length - 1] == '/') length--;
         int in_home = length && !strncmp(cwd, home_directory, length) &&
             (cwd[length] == '\0' || cwd[length] == '/' || length == 1);
         if (in_home) {
@@ -83,13 +73,11 @@ static void print_prompt(void)
     fflush(stdout);
 }
 
-/* Stop at the newline so the command runs before another read. */
-static char *read_line(int fd)
-{
+// Stop at the newline so the command runs before another read
+static char *read_line(int fd){
     size_t length = 0;
     size_t capacity = 128;
     char *line = checked_realloc(NULL, capacity);
-
     for (;;) {
         char ch;
         ssize_t bytes = read(fd, &ch, 1);
@@ -116,19 +104,15 @@ static char *read_line(int fd)
     }
 }
 
-static int is_operator(const char *token)
-{
-    return !strcmp(token, "|") || !strcmp(token, "<") ||
-        !strcmp(token, ">") || !strcmp(token, ">>");
+static int is_operator(const char *token){
+    return !strcmp(token, "|") || !strcmp(token, "<") || !strcmp(token, ">") || !strcmp(token, ">>");
 }
 
 static char **tokenize(char *line, size_t *count)
 {
     char **tokens = NULL;
     char *comment = strchr(line, '#');
-    if (comment)
-        *comment = '\0';
-
+    if (comment) *comment = '\0';
     *count = 0;
     char *p = line;
     while (*p) {
@@ -138,11 +122,9 @@ static char **tokenize(char *line, size_t *count)
         }
         char *start = p;
         if (strchr("<>|", *p)) {
-            if (*p++ == '>' && *p == '>')
-                p++;
+            if (*p++ == '>' && *p == '>') p++;
         } else {
-            while (*p && !isspace((unsigned char)*p) &&
-                   !strchr("<>|", *p))
+            while (*p && !isspace((unsigned char)*p) && !strchr("<>|", *p))
                 p++;
         }
         size_t length = (size_t)(p - start);
@@ -155,22 +137,19 @@ static char **tokenize(char *line, size_t *count)
     return tokens;
 }
 
-static void add_argument(Command *command, const char *text)
-{
+static void add_argument(Command *command, const char *text){
     size_t bytes = (command->count + 2) * sizeof(*command->args);
     command->args = checked_realloc(command->args, bytes);
     command->args[command->count++] = copy_string(text);
     command->args[command->count] = NULL;
 }
 
-static int expand_argument(Command *command, const char *text)
-{
+static int expand_argument(Command *command, const char *text){
     if (!strchr(text, '*')) {
         add_argument(command, text);
         return 0;
     }
-
-    /* P3 only gives '*' a special meaning. Escape other glob syntax. */
+    //P3 only gives '*' a special meaning. Escape other glob syntax.
     char *pattern = checked_realloc(NULL, 2 * strlen(text) + 1);
     size_t length = 0;
     for (size_t i = 0; text[i]; i++) {
@@ -179,7 +158,6 @@ static int expand_argument(Command *command, const char *text)
         pattern[length++] = text[i];
     }
     pattern[length] = '\0';
-
     glob_t matches = {0};
     int result = glob(pattern, 0, NULL, &matches);
     free(pattern);
@@ -195,8 +173,7 @@ static int expand_argument(Command *command, const char *text)
     return result != 0 && result != GLOB_NOMATCH;
 }
 
-static void free_commands(Command *commands, size_t count)
-{
+static void free_commands(Command *commands, size_t count){
     for (size_t i = 0; i < count; i++) {
         for (size_t j = 0; j < commands[i].count; j++)
             free(commands[i].args[j]);
@@ -207,9 +184,7 @@ static void free_commands(Command *commands, size_t count)
     free(commands);
 }
 
-static int parse_commands(char **tokens, size_t token_count,
-                          Command *commands, size_t *count)
-{
+static int parse_commands(char **tokens, size_t token_count, Command *commands, size_t *count){
     *count = 1;
     for (size_t i = 0; i < token_count; i++) {
         Command *command = &commands[*count - 1];
@@ -234,45 +209,36 @@ static int parse_commands(char **tokens, size_t token_count,
             return -1;
         }
     }
-    if (!commands[*count - 1].count)
-        goto syntax_error;
+    if (!commands[*count - 1].count) goto syntax_error;
     return 0;
-
 syntax_error:
     fprintf(stderr, "mysh: syntax error\n");
     return -1;
 }
 
-static int is_builtin(const char *name)
-{
-    return !strcmp(name, "cd") || !strcmp(name, "pwd") ||
-        !strcmp(name, "which") || !strcmp(name, "exit");
+static int is_builtin(const char *name){
+    return !strcmp(name, "cd") || !strcmp(name, "pwd") || !strcmp(name, "which") || !strcmp(name, "exit");
 }
 
-static char *find_executable(const char *name)
-{
+static char *find_executable(const char *name){
     if (strchr(name, '/'))
         return access(name, X_OK) == 0 ? copy_string(name) : NULL;
-
     const char *directories[] = {"/usr/local/bin", "/usr/bin", "/bin"};
     size_t count = sizeof(directories) / sizeof(directories[0]);
     for (size_t i = 0; i < count; i++) {
         size_t length = strlen(directories[i]) + strlen(name) + 2;
         char *path = checked_realloc(NULL, length);
         snprintf(path, length, "%s/%s", directories[i], name);
-        if (access(path, X_OK) == 0)
-            return path;
+        if (access(path, X_OK) == 0)return path;
         free(path);
     }
     return NULL;
 }
 
-static int run_builtin(Command *command)
-{
+static int run_builtin(Command *command){
     char **args = command->args;
     if (!strcmp(args[0], "exit"))
         return 0;
-
     if (!strcmp(args[0], "cd")) {
         if (command->count > 2) {
             fprintf(stderr, "cd: too many arguments\n");
@@ -289,7 +255,6 @@ static int run_builtin(Command *command)
         }
         return 0;
     }
-
     if (!strcmp(args[0], "pwd")) {
         if (command->count != 1) {
             fprintf(stderr, "pwd: too many arguments\n");
@@ -304,7 +269,6 @@ static int run_builtin(Command *command)
         free(cwd);
         return result == EOF;
     }
-
     if (command->count == 1) {
         fprintf(stderr, "which: expected an argument\n");
         return 1;
@@ -324,27 +288,23 @@ static int run_builtin(Command *command)
     return failed;
 }
 
-static int redirect_fd(int fd, int target)
-{
+static int redirect_fd(int fd, int target){
     if (fd == target)
         return 0;
     int result = dup2(fd, target);
     close(fd);
-    if (result < 0)
-        perror("dup2");
+    if (result < 0) perror("dup2");
     return result < 0 ? -1 : 0;
 }
 
-static int apply_redirection(Command *command)
-{
+static int apply_redirection(Command *command){
     if (command->input) {
         int fd = open(command->input, O_RDONLY);
         if (fd < 0) {
             perror(command->input);
             return -1;
         }
-        if (redirect_fd(fd, STDIN_FILENO) < 0)
-            return -1;
+        if (redirect_fd(fd, STDIN_FILENO) < 0) return -1;
     }
     if (command->output) {
         int flags = O_WRONLY | O_CREAT;
@@ -354,55 +314,45 @@ static int apply_redirection(Command *command)
             perror(command->output);
             return -1;
         }
-        if (redirect_fd(fd, STDOUT_FILENO) < 0)
-            return -1;
+        if (redirect_fd(fd, STDOUT_FILENO) < 0)return -1;
     }
     return 0;
 }
 
-static int run_parent_builtin(Command *command)
-{
+static int run_parent_builtin(Command *command){
     int saved_input = dup(STDIN_FILENO);
     int saved_output = dup(STDOUT_FILENO);
     if (saved_input < 0 || saved_output < 0) {
         perror("dup");
-        if (saved_input >= 0)
-            close(saved_input);
-        if (saved_output >= 0)
-            close(saved_output);
+        if (saved_input >= 0) close(saved_input);
+        if (saved_output >= 0) close(saved_output);
         return 1;
     }
-
     int result = apply_redirection(command) < 0 ? 1 : run_builtin(command);
     if (fflush(stdout) == EOF) {
         perror("stdout");
         result = 1;
     }
-    if (redirect_fd(saved_input, STDIN_FILENO) < 0)
-        result = 1;
-    if (redirect_fd(saved_output, STDOUT_FILENO) < 0)
-        result = 1;
+    if (redirect_fd(saved_input, STDIN_FILENO) < 0) result = 1;
+    if (redirect_fd(saved_output, STDOUT_FILENO) < 0) result = 1;
     clearerr(stdout);
     return result;
 }
 
-static void close_pipes(int (*pipes)[2], size_t count)
-{
+static void close_pipes(int (*pipes)[2], size_t count){
     for (size_t i = 0; i < count; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
 }
 
-static JobResult execute_job(Command *commands, size_t count, int interactive)
-{
+static JobResult execute_job(Command *commands, size_t count, int interactive){
     JobResult result = {1, 0};
     fflush(NULL);
     if (count == 1 && is_builtin(commands[0].args[0])) {
         result.code = run_parent_builtin(commands);
         return result;
     }
-
     size_t pipe_count = count - 1;
     int (*pipes)[2] = NULL;
     if (pipe_count)
@@ -415,7 +365,6 @@ static JobResult execute_job(Command *commands, size_t count, int interactive)
             return result;
         }
     }
-
     pid_t *children = checked_realloc(NULL, count * sizeof(*children));
     size_t started = 0;
     int failed = 0;
@@ -447,19 +396,15 @@ static JobResult execute_job(Command *commands, size_t count, int interactive)
                 _exit(1);
             }
             close_pipes(pipes, pipe_count);
-            if (apply_redirection(&commands[i]) < 0)
-                _exit(1);
+            if (apply_redirection(&commands[i]) < 0) _exit(1);
             if (is_builtin(commands[i].args[0])) {
                 int code = run_builtin(&commands[i]);
-                if (fflush(stdout) == EOF)
-                    code = 1;
+                if (fflush(stdout) == EOF) code = 1;
                 _exit(code);
             }
-
             char *path = find_executable(commands[i].args[0]);
             if (!path) {
-                fprintf(stderr, "mysh: %s: command not found\n",
-                        commands[i].args[0]);
+                fprintf(stderr, "mysh: %s: command not found\n", commands[i].args[0]);
                 _exit(127);
             }
             execv(path, commands[i].args);
@@ -469,10 +414,9 @@ static JobResult execute_job(Command *commands, size_t count, int interactive)
         }
         children[started++] = pid;
     }
-
     close_pipes(pipes, pipe_count);
     free(pipes);
-    /* Wait for every stage, using the last stage's result for the job. */
+    //Wait for every stage, using the last stage's result for the job. 
     for (size_t i = 0; i < started; i++) {
         int status;
         pid_t waited;
@@ -497,14 +441,11 @@ static JobResult execute_job(Command *commands, size_t count, int interactive)
     }
     return result;
 }
-
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
     if (argc > 2) {
         fprintf(stderr, "Usage: %s [file]\n", argv[0]);
         return EXIT_SUCCESS;
     }
-
     int input = STDIN_FILENO;
     if (argc == 2) {
         input = open(argv[1], O_RDONLY);
@@ -519,13 +460,10 @@ int main(int argc, char **argv)
     int interactive = argc == 1 && isatty(STDIN_FILENO);
     if (interactive)
         puts("Welcome to my shell!");
-
     for (;;) {
-        if (interactive)
-            print_prompt();
+        if (interactive) print_prompt();
         char *line = read_line(input);
-        if (!line)
-            break;
+        if (!line) break;
         size_t token_count;
         char **tokens = tokenize(line, &token_count);
         free(line);
@@ -533,7 +471,6 @@ int main(int argc, char **argv)
             free(tokens);
             continue;
         }
-
         size_t bytes = (token_count + 1) * sizeof(Command);
         Command *commands = checked_realloc(NULL, bytes);
         memset(commands, 0, bytes);
@@ -542,8 +479,7 @@ int main(int argc, char **argv)
         int should_exit = 0;
         if (parse_commands(tokens, token_count, commands, &command_count) == 0) {
             for (size_t i = 0; i < command_count; i++) {
-                if (!strcmp(commands[i].args[0], "exit"))
-                    should_exit = 1;
+                if (!strcmp(commands[i].args[0], "exit")) should_exit = 1;
             }
             result = execute_job(commands, command_count, interactive);
         }
@@ -551,20 +487,13 @@ int main(int argc, char **argv)
             free(tokens[i]);
         free(tokens);
         free_commands(commands, command_count);
-
         if (interactive) {
-            if (result.signal)
-                printf("Terminated by signal %s\n", strsignal(result.signal));
-            else if (result.code)
-                printf("Exited with status %d\n", result.code);
+            if (result.signal) printf("Terminated by signal %s\n", strsignal(result.signal));
+            else if (result.code) printf("Exited with status %d\n", result.code);
         }
-        if (should_exit)
-            break;
+        if (should_exit) break;
     }
-
-    if (input != STDIN_FILENO)
-        close(input);
-    if (interactive)
-        puts("Exiting my shell.");
+    if (input != STDIN_FILENO) close(input);
+    if (interactive) puts("Exiting my shell.");
     return EXIT_SUCCESS;
 }

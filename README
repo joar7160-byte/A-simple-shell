@@ -3,60 +3,53 @@ CS 214 Project III: A Simple Shell
 Kevin Garcia - kag408
 Joarder Rashid - jmr688
 
-Building and running
---------------------
-Run make to compile mysh.c and run the basic checks
-Run ./mysh to enter commands in the terminal
-Run ./mysh filename to read commands from a file
-You can also pipe input into the program:
+Build and run
+-------------
+Run make to compile mysh.c and run the tests. Each check prints PASS or
+FAIL. The tests use sh and common Unix tools.
 
-    printf 'pwd\nexit\n' | ./mysh
+    make
+    ./mysh
+    ./mysh mysh_tests.txt
+    printf 'echo hello\nexit\n' | ./mysh
 
-make run starts the shell, make test repeats the basic checks, and
-make clean removes the executable
+make mysh builds without testing. make test repeats the tests.
+make run starts the shell. make clean removes the executable.
 
-Current implementation
-----------------------
-The program uses read() to read one character at a time. It processes
-one line before reading the next command. It accepts input from the
-terminal, a pipe, or a file given on the command line.
+How it works
+------------
+The shell uses read() to read a full line before executing it. The same
+input loop and parser handle terminal input, piped input, and input files.
+The parser separates arguments, comments, redirections, and pipes.
+glob() expands * patterns. Other glob operators are escaped, and patterns
+with no matches are passed through unchanged.
 
-The current built-ins are pwd and exit. These must be entered without
-extra arguments or surrounding spaces. The program prints a temporary
-mysh$ prompt in interactive mode and no prompts in batch mode.
+External commands use fork() and execv(). Bare names are searched in
+/usr/local/bin, /usr/bin, and /bin, in that order. Built-ins are cd, pwd,
+which, and exit. They run in the parent unless they are in a pipeline.
+which looks for executable files even when given a built-in name.
+
+Redirection uses open() and dup2(). New output files request mode 0640,
+subject to umask. Standalone built-ins restore their original descriptors.
+Pipeline stages start before the shell waits. Unused pipe ends are closed,
+every child is waited for, and the last stage determines success.
+Batch child input defaults to /dev/null unless a file or pipe supplies it.
+An exit in a pipeline stops the shell after the whole job finishes.
+
+Interactive mode prints the directory prompt, abbreviates HOME as ~,
+and reports failed-command statuses. It also prints welcome and goodbye
+messages. Batch mode does not print these messages or prompts.
 
 Testing
 -------
-The Makefile checks these cases and prints PASS or FAIL:
+Run make test to use tests.sh. It creates temporary fixtures, compares
+actual output with expected text, and checks exit statuses and file mode.
+The temporary directory is removed afterward.
 
-- pwd followed by exit: prints the working directory with no prompt.
-- exit followed by pwd: exits without running pwd.
-- pwd without a final newline: still runs the command.
-
-The tests stop at the first failure. These checks cover the current
-input handling, not the full assignment.
-
-Additional checks to run:
-
-- Put pwd and exit in a file and pass its filename to ./mysh
-  the output should match pwd, without a prompt
-- Give ./mysh a filename that does not exist. It should print an error
-  and return a nonzero exit status
-- Run ./mysh interactively and try pwd, an empty line, exit, and Ctrl+D
-- Enter a line longer than 4095 characters. It should report that the
-  line is too long instead of executing a shortened command
-
-mysh_tests.txt has inputs for the remaining features. Its comments
-explain the expected output. Run it from a fresh directory because
-it creates test files. The current version cannot pass all of those
-tests yet. Test results should be recorded after checking the output.
-
-Remaining work
---------------
-The shell still needs command parsing, comments, cd, which, external
-program execution, wildcard expansion, redirection, and pipelines.
-It also needs the required directory prompt, welcome/goodbye messages,
-interactive failure messages, and batch-mode child input handling.
-exit with arguments or in a pipeline is not implemented.
-
-Update this README as those features are completed and tested.
+The 24 checks cover arguments, comments, explicit paths, final input
+without a newline, exit arguments, batch child input, pwd, cd, HOME,
+invalid built-in arguments, redirection, append, descriptor restoration,
+file errors, multiple pipes, early-closing readers, pipeline cd, wildcards,
+hidden files, unmatched patterns, syntax errors, unknown commands, which,
+exit in pipelines, filename input, missing files, and output mode 0640.
+All 24 passed in the development environment. Repeat them on iLab.
