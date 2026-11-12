@@ -1,0 +1,109 @@
+
+# P3 batch tests: run ./mysh mysh_tests.txt
+
+# 1. Basic commands, arguments, paths, and comments.
+echo TEST_1_basic_commands
+echo hello world
+/bin/echo absolute_path_works
+echo comment_works # This text must not be printed.
+
+# 2. Built-ins. pwd prints the test directory; which prints executable paths.
+echo TEST_2_builtins
+pwd
+which echo cat wc
+which /bin/echo
+which which
+
+# 3. Redirection. Expected: alpha, then alpha and beta, then replaced.
+echo TEST_3_redirection
+echo alpha > p3_output.txt
+cat < p3_output.txt
+echo beta >> p3_output.txt
+cat p3_output.txt
+echo replaced > p3_output.txt
+cat p3_output.txt
+# Both forms should create files containing replaced.
+cat < p3_output.txt > p3_copy_a.txt
+cat > p3_copy_b.txt < p3_output.txt
+cat p3_copy_a.txt p3_copy_b.txt
+# Verify redirection also works for built-ins.
+pwd > p3_pwd.txt
+cat p3_pwd.txt
+which echo > p3_which.txt
+cat p3_which.txt
+
+# 4. Pipelines. Word counts should be 3 and 4 (spacing may vary).
+echo TEST_4_pipelines
+echo one two three | wc -w
+echo one two three four | cat | wc -w
+pwd | cat
+# Larger output checks concurrent execution and pipe descriptor closure.
+seq 1 20000 | cat | wc -l
+
+# 5. Wildcards: multiple patterns, subdirectories, hidden and unmatched files.
+echo TEST_5_wildcards
+mkdir p3_globs
+touch p3_globs/apple.txt p3_globs/apricot.txt p3_globs/banana.log
+touch p3_globs/.hidden.txt
+echo p3_globs/*.txt
+# Previous line: apple.txt and apricot.txt; must exclude .hidden.txt.
+echo p3_globs/a*.txt p3_globs/*.log
+echo p3_globs/.h*.txt
+echo p3_globs/no_match_12345*.xyz
+# Last pattern must be printed unchanged.
+
+# 6. cd changes the shell directory; cd in a pipe must not change the parent.
+echo TEST_6_cd
+pwd
+cd p3_globs
+pwd
+echo *.txt
+cd ..
+cd p3_globs | cat
+pwd
+# Previous pwd should still show the original test directory.
+
+# 7. Batch child stdin must default to /dev/null: cat must not eat test lines.
+echo TEST_7_batch_stdin
+cat
+echo AFTER_CAT_must_appear
+
+# 8. Expected failures: each error must leave the shell running.
+echo TEST_8_expected_errors
+p3_nonexistent_command_12345
+echo AFTER_UNKNOWN_COMMAND
+cd p3_nonexistent_directory_12345
+echo AFTER_BAD_CD
+cd one two
+echo AFTER_TOO_MANY_CD_ARGUMENTS
+which
+echo AFTER_WHICH_WITH_NO_ARGUMENTS
+which echo p3_nonexistent_command_12345 cat
+echo AFTER_PARTIAL_WHICH_FAILURE
+cat < p3_missing_input_12345.txt
+echo AFTER_MISSING_INPUT
+echo hello > p3_missing_directory_12345/out.txt
+echo AFTER_OUTPUT_OPEN_FAILURE
+cat < <
+echo AFTER_BAD_REDIRECTION
+echo hello |
+echo AFTER_TRAILING_PIPE
+| cat
+echo AFTER_LEADING_PIPE
+
+# 9. Pipeline status comes from the last program.
+# No automatic status messages are expected in batch mode.
+echo TEST_9_pipeline_status
+false | true
+true | false
+echo STILL_RUNNING_AFTER_FAILED_PIPELINE
+
+# 10. cd with no argument should go HOME; no more fixture paths used after this.
+echo TEST_10_home
+cd
+pwd
+
+# 11. Exit in a pipeline must wait for the other stage and stop the shell.
+echo TEST_11_exit
+exit | echo EXIT_PIPELINE_COMPLETED
+echo ERROR_THIS_LINE_MUST_NOT_RUN

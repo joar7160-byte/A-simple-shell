@@ -2,57 +2,83 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
 
 #define MAX_LINE 4096
 
 int main(int argc, char *argv[]){
     char line[MAX_LINE];
-    int running = 1;
+    int input_fd = STDIN_FILENO;
 
-    while(running){
-        printf("mysh$ ");     //temp prompt 
-        fflush(stdout);      
-        char ch;              //holds each character 
-        int ind = 0;   
-        ssize_t bytes;      // # of bytes returned by read
+    if (argc > 2) {
+        fprintf(stderr, "Usage: %s [file]\n", argv[0]);
+        return EXIT_SUCCESS;
+    }
 
+    if (argc == 2) {
+        input_fd = open(argv[1], O_RDONLY);
 
-        while ((bytes = read(STDIN_FILENO, &ch, 1)) > 0){ //reads one char at a time
-            if (ch == '\n')
-            {
-                break; 
-            }
-            
-            //Check if ind is within the Max_Line and put index in our max line array
-            if (ind < MAX_LINE - 1){
-                line[ind] = ch; 
-                ind++;
-            }
+        if (input_fd == -1) {
+            perror(argv[1]);
+            return EXIT_FAILURE;
+        }
+    }
+
+    int interactive = argc == 1 && isatty(STDIN_FILENO);
+     while (1) {
+        if (interactive) {
+            printf("mysh$ ");
+            fflush(stdout);
         }
 
+        char ch;
+        int ind = 0;
+        int too_long = 0;
+        ssize_t bytes;
 
-        //Stop reading or input ended
-        if(bytes < 0 || (bytes == 0 && ind == 0)){
+        while ((bytes = read(input_fd, &ch, 1)) != 0) {
+            if (bytes < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                break;
+            }
+            if (ch == '\n') {
+                break;
+            }
+            if (ind < MAX_LINE - 1) {
+                line[ind++] = ch;
+            } else {
+                too_long = 1;
+            }
+        }
+        if (bytes < 0) {
+            perror("read");
             break;
         }
-        
-        line[ind] = '\0';    //end of string
-
-        if(strcmp(line, "exit") == 0){ //exit command so stop running shell
-            running = 0;   
+        if (bytes == 0 && ind == 0) {
+            break;
         }
-
-        else if(strcmp(line, "pwd") == 0){ //if command is pwd
-            char cdp[4096];      //used to store curr directory path
-
-            //get curr directory and print each 
-            if(getcwd(cdp, sizeof(cdp)) != NULL){ 
-                printf("%s\n", cdp);
-            }
-            else{
+        if (too_long) {
+            fprintf(stderr, "mysh: command line too long\n");
+            continue;
+        }
+        line[ind] = '\0';
+        if (strcmp(line, "exit") == 0) {
+            break;
+        }
+        if (strcmp(line, "pwd") == 0) {
+            char cwd[MAX_LINE];
+            if (getcwd(cwd, sizeof(cwd)) == NULL) {
                 perror("pwd");
+            } else {
+                printf("%s\n", cwd);
             }
         }
+    }
+    if (input_fd != STDIN_FILENO) {
+        close(input_fd);
     }
     return EXIT_SUCCESS;
 }
